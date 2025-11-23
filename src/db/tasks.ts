@@ -1,5 +1,5 @@
-import SQLite, {SQLiteDatabase} from 'react-native-sqlite-storage';
-import {Task, TaskStatus} from '../types';
+import SQLite, {SQLiteDatabase, ResultSet} from 'react-native-sqlite-storage';
+import {Task, TaskStatus, Workspace} from '../types';
 
 SQLite.enablePromise(true);
 
@@ -13,20 +13,60 @@ const CREATE_TABLE_QUERY = `
     description TEXT,
     status TEXT NOT NULL,
     created_at INTEGER NOT NULL,
-    completed_at INTEGER
+    completed_at INTEGER,
+    workspace_id INTEGER
   );
 `;
+
+const CREATE_WORKSPACES_TABLE = `
+  CREATE TABLE IF NOT EXISTS workspaces (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE
+  );
+`;
+
+const DEFAULT_WORKSPACES = ['Расписание трансферов', 'Задачи по проекту'];
 
 let dbInstance: SQLiteDatabase | null = null;
 
 const mapRowToTask = (row: any): Task => ({
   id: row.id,
-  title: row.title,
-  description: row.description ?? '',
+  text: row.title,
+  workspaceId: row.workspace_id,
   status: row.status as TaskStatus,
   createdAt: row.created_at,
   completedAt: row.completed_at,
 });
+
+const hasColumn = async (db: SQLiteDatabase, table: string, column: string) => {
+  const [result] = await db.executeSql(`PRAGMA table_info(${table})`);
+  return result.rows.raw().some((r: any) => r.name === column);
+};
+
+const ensureWorkspaces = async (db: SQLiteDatabase): Promise<Workspace[]> => {
+  await db.executeSql(CREATE_WORKSPACES_TABLE);
+  const [existing] = await db.executeSql('SELECT * FROM workspaces ORDER BY id ASC');
+  if (existing.rows.length === 0) {
+    for (const name of DEFAULT_WORKSPACES) {
+      await db.executeSql('INSERT INTO workspaces (name) VALUES (?)', [name]);
+    }
+    const [seeded] = await db.executeSql('SELECT * FROM workspaces ORDER BY id ASC');
+    return seeded.rows.raw();
+  }
+  return existing.rows.raw();
+};
+
+const ensureTasksStructure = async (db: SQLiteDatabase, defaultWorkspaceId: number) => {
+  await db.executeSql(CREATE_TABLE_QUERY);
+  const hasWorkspace = await hasColumn(db, 'tasks', 'workspace_id');
+  if (!hasWorkspace) {
+    await db.executeSql('ALTER TABLE tasks ADD COLUMN workspace_id INTEGER;');
+  }
+  await db.executeSql(
+    'UPDATE tasks SET workspace_id = ? WHERE workspace_id IS NULL OR workspace_id = 0',
+    [defaultWorkspaceId],
+  );
+};
 
 const initDatabase = async () => {
   if (dbInstance) {
@@ -38,7 +78,9 @@ const initDatabase = async () => {
     location: DB_LOCATION,
   });
 
-  await dbInstance.executeSql(CREATE_TABLE_QUERY);
+  const workspaces = await ensureWorkspaces(dbInstance);
+  const defaultWorkspaceId = workspaces[0]?.id ?? 1;
+  await ensureTasksStructure(dbInstance, defaultWorkspaceId);
   return dbInstance;
 };
 
@@ -49,33 +91,36 @@ export const getDb = async () => {
   return initDatabase();
 };
 
-export const getTasks = async (status?: TaskStatus): Promise<Task[]> => {
+export const getTasks = async (
+  workspaceId: number,
+  status?: TaskStatus,
+): Promise<Task[]> => {
   const db = await getDb();
   const query = status
-    ? 'SELECT * FROM tasks WHERE status = ? ORDER BY created_at DESC'
-    : 'SELECT * FROM tasks ORDER BY status, created_at DESC';
-  const params = status ? [status] : [];
+    ? 'SELECT * FROM tasks WHERE workspace_id = ? AND status = ? ORDER BY created_at DESC'
+    : 'SELECT * FROM tasks WHERE workspace_id = ? ORDER BY status, created_at DESC';
+  const params = status ? [workspaceId, status] : [workspaceId];
   const [results] = await db.executeSql(query, params);
   return results.rows.raw().map(mapRowToTask);
 };
 
 export const createTask = async (input: {
-  title: string;
-  description?: string;
+  text: string;
+  workspaceId: number;
 }): Promise<Task> => {
   const db = await getDb();
   const now = Date.now();
 
   const [result] = await db.executeSql(
-    'INSERT INTO tasks (title, description, status, created_at) VALUES (?, ?, ?, ?)',
-    [input.title.trim(), input.description?.trim() ?? '', 'active', now],
+    'INSERT INTO tasks (title, description, status, created_at, workspace_id) VALUES (?, ?, ?, ?, ?)',
+    [input.text.trim(), '', 'active', now, input.workspaceId],
   );
 
   const insertedId = result.insertId;
   return {
     id: insertedId ?? now,
-    title: input.title.trim(),
-    description: input.description?.trim() ?? '',
+    text: input.text.trim(),
+    workspaceId: input.workspaceId,
     status: 'active',
     createdAt: now,
   };
@@ -96,4 +141,34 @@ export const updateTaskStatus = async (
 export const deleteTask = async (id: number): Promise<void> => {
   const db = await getDb();
   await db.executeSql('DELETE FROM tasks WHERE id = ?', [id]);
+};
+
+export const getWorkspaces = async (): Promise<Workspace[]> => {
+  const db = await getDb();
+  const [results] = await db.executeSql(
+    'SELECT * FROM workspaces ORDER BY id ASC',
+  );
+  return results.rows.raw();
+};
+
+export const createWorkspace = async (name: string): Promise<Workspace> => {
+  const db = await getDb();
+  const cleaned = name.trim();
+  await db.executeSql('INSERT INTO workspaces (name) VALUES (?)', [cleaned]);
+  const [res] = await db.executeSql(
+    'SELECT * FROM workspaces WHERE name = ? ORDER BY id DESC LIMIT 1',
+    [cleaned],
+  );
+  return res.rows.raw()[0] as Workspace;
+};
+
+export const renameWorkspace = async (
+  id: number,
+  name: string,
+): Promise<void> => {
+  const db = await getDb();
+  await db.executeSql('UPDATE workspaces SET name = ? WHERE id = ?', [
+    name.trim(),
+    id,
+  ]);
 };

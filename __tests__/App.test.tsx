@@ -4,22 +4,16 @@
 
 import 'react-native';
 import React from 'react';
-import {useColorScheme as rnUseColorScheme} from 'react-native';
-jest.mock('react-native-sqlite-storage', () => {
-  const rows = {
-    length: 0,
-    item: () => undefined,
-    raw: () => [],
-  };
-  return {
-    enablePromise: () => {},
-    openDatabase: jest.fn(() =>
-      Promise.resolve({
-        executeSql: jest.fn(() => Promise.resolve([rows])),
-      }),
-    ),
-  };
-});
+
+jest.mock('../src/db/tasks', () => ({
+  getTasks: jest.fn().mockResolvedValue([]),
+  createTask: jest.fn(),
+  deleteTask: jest.fn(),
+  updateTaskStatus: jest.fn(),
+  getWorkspaces: jest.fn().mockResolvedValue([{id: 1, name: 'Рабочее'}]),
+  createWorkspace: jest.fn(),
+  renameWorkspace: jest.fn(),
+}));
 
 jest.spyOn(require('react-native'), 'useColorScheme').mockReturnValue('light');
 

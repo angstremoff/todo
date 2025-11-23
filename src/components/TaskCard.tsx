@@ -63,14 +63,7 @@ export const TaskCard: React.FC<Props> = ({
         ) : null}
       </View>
 
-      <Text style={[styles.title, {color: theme.colors.text}]}>
-        {task.title}
-      </Text>
-      {task.description ? (
-        <Text style={[styles.description, {color: theme.colors.muted}]}>
-          {task.description}
-        </Text>
-      ) : null}
+      <Text style={[styles.title, {color: theme.colors.text}]}>{task.text}</Text>
       <View style={styles.footer}>
         <Text style={[styles.date, {color: theme.colors.muted}]}>
           {formatDate(task)}
@@ -132,10 +125,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-  },
-  description: {
-    fontSize: 15,
-    lineHeight: 20,
   },
   footer: {
     flexDirection: 'row',
