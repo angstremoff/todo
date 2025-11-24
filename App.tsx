@@ -10,7 +10,6 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
-  Share,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -21,8 +20,8 @@ import {
   UIManager,
   View,
   useColorScheme,
+  Share,
 } from 'react-native';
-import RNFS from 'react-native-fs';
 import {SegmentedControl} from './src/components/SegmentedControl';
 import {TaskCard} from './src/components/TaskCard';
 import {EmptyState} from './src/components/EmptyState';
@@ -85,15 +84,12 @@ const App = (): React.JSX.Element => {
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
-  const [importPath, setImportPath] = useState('');
   const [transfering, setTransfering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
-
   useEffect(() => {
     setThemeMode(systemScheme === 'dark' ? 'dark' : 'light');
-    setImportPath(BACKUP_PATH);
   }, [systemScheme]);
 
   const theme = useMemo(
@@ -240,8 +236,6 @@ const App = (): React.JSX.Element => {
     setTaskMenuTask(null);
   };
 
-  const BACKUP_PATH = `${RNFS.DocumentDirectoryPath}/todo-backup.json`;
-
   const handleExport = async () => {
     try {
       setTransfering(true);
@@ -251,41 +245,6 @@ const App = (): React.JSX.Element => {
       setExportVisible(true);
     } catch (e) {
       setError('Не удалось экспортировать данные');
-    } finally {
-      setTransfering(false);
-    }
-  };
-
-  const handleSaveToFile = async () => {
-    try {
-      setTransfering(true);
-      const data = await exportData();
-      const json = JSON.stringify(data);
-      await RNFS.writeFile(BACKUP_PATH, json, 'utf8');
-      setExportText(json);
-      setImportPath(BACKUP_PATH);
-      setExportVisible(true);
-    } catch (e) {
-      setError('Не удалось сохранить файл');
-    } finally {
-      setTransfering(false);
-    }
-  };
-
-  const handleLoadFromFile = async () => {
-    try {
-      setTransfering(true);
-      const path = importPath || BACKUP_PATH;
-      const exists = await RNFS.exists(path);
-      if (!exists) {
-        setError('Файл не найден');
-        return;
-      }
-      const content = await RNFS.readFile(path, 'utf8');
-      setImportText(content);
-      setImportVisible(true);
-    } catch (e) {
-      setError('Не удалось прочитать файл');
     } finally {
       setTransfering(false);
     }
@@ -451,40 +410,6 @@ const App = (): React.JSX.Element => {
               Рабочие пространства
             </Text>
             <View style={styles.headerActions}>
-              <Pressable
-                onPress={handleSaveToFile}
-                disabled={transfering}
-                style={({pressed}) => [
-                  styles.smallAction,
-                  {
-                    backgroundColor: pressed
-                      ? theme.colors.border
-                      : theme.colors.card,
-                    borderColor: theme.colors.border,
-                    opacity: transfering ? 0.6 : 1,
-                  },
-                ]}>
-                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
-                  В файл
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleLoadFromFile}
-                disabled={transfering}
-                style={({pressed}) => [
-                  styles.smallAction,
-                  {
-                    backgroundColor: pressed
-                      ? theme.colors.border
-                      : theme.colors.card,
-                    borderColor: theme.colors.border,
-                    opacity: transfering ? 0.6 : 1,
-                  },
-                ]}>
-                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
-                  Из файла
-                </Text>
-              </Pressable>
               <Pressable
                 onPress={handleExport}
                 disabled={transfering}
@@ -911,22 +836,6 @@ const App = (): React.JSX.Element => {
                 style={[
                   styles.input,
                   styles.inputMultiline,
-                  {
-                    backgroundColor: theme.colors.input,
-                    color: theme.colors.text,
-                  },
-                ]}
-              />
-              <Text style={{color: theme.colors.muted, marginTop: 6}}>
-                Путь файла (по умолчанию todo-backup.json в DocumentDirectory):
-              </Text>
-              <TextInput
-                placeholder={BACKUP_PATH}
-                placeholderTextColor={theme.colors.muted}
-                value={importPath}
-                onChangeText={text => setImportPath(text)}
-                style={[
-                  styles.input,
                   {
                     backgroundColor: theme.colors.input,
                     color: theme.colors.text,
