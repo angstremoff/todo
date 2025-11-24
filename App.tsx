@@ -65,6 +65,7 @@ const App = (): React.JSX.Element => {
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
+  const [menuWorkspace, setMenuWorkspace] = useState<Workspace | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
@@ -209,21 +210,22 @@ const App = (): React.JSX.Element => {
   };
 
   const handleRenameWorkspace = async () => {
-    if (!renameValue.trim() || !selectedWorkspaceId) {
+    if (!renameValue.trim() || !menuWorkspace) {
       setError('Введите новое имя');
       return;
     }
     try {
       setWorkspaceSaving(true);
-      await renameWorkspace(selectedWorkspaceId, renameValue.trim());
+      await renameWorkspace(menuWorkspace.id, renameValue.trim());
       setWorkspaces(prev => {
         const next = prev.map(w =>
-          w.id === selectedWorkspaceId ? {...w, name: renameValue.trim()} : w,
+          w.id === menuWorkspace.id ? {...w, name: renameValue.trim()} : w,
         );
         ensureSelection(next);
         return next;
       });
       setRenameModalVisible(false);
+      setMenuWorkspace(null);
     } catch (e) {
       setError('Не удалось переименовать пространство');
     } finally {
@@ -232,17 +234,18 @@ const App = (): React.JSX.Element => {
   };
 
   const handleDeleteWorkspace = async () => {
-    if (!selectedWorkspaceId) {
+    if (!menuWorkspace) {
       return;
     }
     try {
       setWorkspaceSaving(true);
-      await deleteWorkspace(selectedWorkspaceId);
-      const nextSpaces = workspaces.filter(w => w.id !== selectedWorkspaceId);
+      await deleteWorkspace(menuWorkspace.id);
+      const nextSpaces = workspaces.filter(w => w.id !== menuWorkspace.id);
       setWorkspaces(nextSpaces);
       ensureSelection(nextSpaces);
       setConfirmDeleteWs(false);
       setRenameModalVisible(false);
+      setMenuWorkspace(null);
       await loadTasks();
     } catch (e) {
       setError('Не удалось удалить пространство');
@@ -263,18 +266,18 @@ const App = (): React.JSX.Element => {
   const listEmpty = (
     <EmptyState
       title={
-        activeTab === 'active'
-          ? 'Здесь пока пусто'
-          : 'Архив чист — круто!'
+        activeTab === 'done'
+          ? 'Архив чист — круто!'
+          : 'Здесь пока пусто'
       }
       subtitle={
-        activeTab === 'active'
-          ? 'Добавьте первую задачу в выбранное пространство.'
-          : 'Выполненные задачи появятся здесь.'
+        activeTab === 'done'
+          ? 'Выполненные задачи появятся здесь.'
+          : 'Добавьте первую задачу в выбранное пространство.'
       }
-      actionLabel={activeTab === 'active' ? 'Добавить' : undefined}
+      actionLabel={activeTab !== 'done' ? 'Добавить' : undefined}
       onAction={
-        activeTab === 'active' ? () => setModalVisible(true) : undefined
+        activeTab !== 'done' ? () => setModalVisible(true) : undefined
       }
       theme={theme}
     />
@@ -355,6 +358,10 @@ const App = (): React.JSX.Element => {
                         setSelectedWorkspaceId(space.id);
                         setError(null);
                       }}
+                      onLongPress={() => {
+                        setMenuWorkspace(space);
+                        setRenameValue(space.name);
+                      }}
                       style={({pressed}) => [
                         styles.workspacePill,
                         {
@@ -378,47 +385,6 @@ const App = (): React.JSX.Element => {
                   );
                 })}
               </ScrollView>
-              {selectedWorkspace ? (
-                <View style={styles.workspaceActions}>
-                  <Pressable
-                    onPress={() => {
-                      setRenameValue(selectedWorkspace.name);
-                      setRenameModalVisible(true);
-                    }}
-                    style={({pressed}) => [
-                      styles.secondaryButton,
-                      {
-                        backgroundColor: pressed
-                          ? theme.colors.border
-                          : theme.colors.card,
-                        borderColor: theme.colors.border,
-                        flex: 1,
-                      },
-                    ]}>
-                    <Text
-                      style={[styles.renameText, {color: theme.colors.muted}]}>
-                      Переименовать
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    onPress={() => setConfirmDeleteWs(true)}
-                    style={({pressed}) => [
-                      styles.secondaryButton,
-                      {
-                        backgroundColor: pressed
-                          ? theme.colors.border
-                          : theme.colors.card,
-                        borderColor: theme.colors.border,
-                        flex: 1,
-                      },
-                    ]}>
-                    <Text
-                      style={[styles.renameText, {color: theme.colors.danger}]}>
-                      Удалить
-                    </Text>
-                  </Pressable>
-                </View>
-              ) : null}
             </>
           )}
 
@@ -432,11 +398,12 @@ const App = (): React.JSX.Element => {
             ]}>
             <SegmentedControl
               options={[
+                {label: 'Все', value: 'all'},
                 {label: 'Текущие', value: 'active'},
                 {label: 'Архив', value: 'done'},
               ]}
               value={activeTab}
-              onChange={value => setActiveTab(value)}
+              onChange={value => setActiveTab(value as TabKey)}
               theme={theme}
             />
           </View>
@@ -637,10 +604,87 @@ const App = (): React.JSX.Element => {
         </Modal>
 
         <Modal
+          visible={!!menuWorkspace && !renameModalVisible && !confirmDeleteWs}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setMenuWorkspace(null)}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                {menuWorkspace?.name || 'Пространство'}
+              </Text>
+              <View style={{gap: 10}}>
+                <Pressable
+                  onPress={() => {
+                    setRenameModalVisible(true);
+                  }}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Переименовать
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setConfirmDeleteWs(true)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.danger}]}>
+                    Удалить
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setMenuWorkspace(null)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Закрыть
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
           visible={renameModalVisible}
           animationType="fade"
           transparent
-          onRequestClose={() => setRenameModalVisible(false)}>
+          onRequestClose={() => {
+            setRenameModalVisible(false);
+            setRenameValue('');
+          }}>
           <View
             style={[
               styles.modalOverlay,
@@ -678,6 +722,7 @@ const App = (): React.JSX.Element => {
                   onPress={() => {
                     setRenameModalVisible(false);
                     setRenameValue('');
+                    setMenuWorkspace(null);
                   }}
                   style={({pressed}) => [
                     styles.secondaryButton,
@@ -717,7 +762,10 @@ const App = (): React.JSX.Element => {
           visible={confirmDeleteWs}
           animationType="fade"
           transparent
-          onRequestClose={() => setConfirmDeleteWs(false)}>
+          onRequestClose={() => {
+            setConfirmDeleteWs(false);
+            setMenuWorkspace(null);
+          }}>
           <View
             style={[
               styles.modalOverlay,
@@ -739,7 +787,10 @@ const App = (): React.JSX.Element => {
               </Text>
               <View style={styles.modalActions}>
                 <Pressable
-                  onPress={() => setConfirmDeleteWs(false)}
+                  onPress={() => {
+                    setConfirmDeleteWs(false);
+                    setMenuWorkspace(null);
+                  }}
                   style={({pressed}) => [
                     styles.secondaryButton,
                     {
