@@ -270,10 +270,19 @@ const App = (): React.JSX.Element => {
       setTransfering(true);
       const parsed = JSON.parse(importText);
       await importData(parsed, importMode);
+      const ws = await getWorkspaces();
+      setWorkspaces(ws);
+      const nextId = ws[0]?.id ?? null;
+      setSelectedWorkspaceId(nextId);
+      setActiveTab('all');
+      if (nextId) {
+        const data = await getTasks(nextId, undefined);
+        setTasks(data);
+      } else {
+        setTasks([]);
+      }
       setImportVisible(false);
       setImportText('');
-      await loadWorkspaces();
-      await loadTasks();
     } catch (e) {
       setError('Импорт не удался. Проверьте формат.');
     } finally {
