@@ -7,14 +7,14 @@ interface Props {
   task: Task;
   theme: Theme;
   onToggleStatus: (task: Task) => void;
-  onDelete?: (task: Task) => void;
+  onMenu?: (task: Task) => void;
 }
 
 export const TaskCard: React.FC<Props> = ({
   task,
   theme,
   onToggleStatus,
-  onDelete,
+  onMenu,
 }) => {
   const isDone = task.status === 'done';
   return (
@@ -44,21 +44,19 @@ export const TaskCard: React.FC<Props> = ({
             {isDone ? 'Выполнено' : 'В работе'}
           </Text>
         </View>
-        {onDelete ? (
+        {onMenu ? (
           <Pressable
-            onPress={() => onDelete(task)}
+            onPress={() => onMenu(task)}
+            hitSlop={10}
             style={({pressed}) => [
-              styles.deleteButton,
+              styles.menuButton,
               {
-                borderColor: theme.colors.border,
                 backgroundColor: pressed
                   ? theme.colors.border
                   : 'transparent',
               },
             ]}>
-            <Text style={[styles.deleteLabel, {color: theme.colors.muted}]}>
-              Удалить
-            </Text>
+            <Text style={[styles.menuText, {color: theme.colors.muted}]}>⋯</Text>
           </Pressable>
         ) : null}
       </View>
@@ -154,5 +152,15 @@ const styles = StyleSheet.create({
   deleteLabel: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  menuButton: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  menuText: {
+    fontSize: 18,
+    fontWeight: '800',
+    lineHeight: 18,
   },
 });

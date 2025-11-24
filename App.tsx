@@ -20,7 +20,6 @@ import {
   UIManager,
   View,
   useColorScheme,
-  GestureResponderEvent,
 } from 'react-native';
 import {SegmentedControl} from './src/components/SegmentedControl';
 import {TaskCard} from './src/components/TaskCard';
@@ -33,6 +32,7 @@ import {
   getWorkspaces,
   renameWorkspace,
   deleteWorkspace,
+  updateTaskText,
   updateTaskStatus,
 } from './src/db/tasks';
 import {Task, Workspace} from './src/types';
@@ -72,6 +72,10 @@ const App = (): React.JSX.Element => {
   const [renameValue, setRenameValue] = useState('');
   const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
   const [menuWorkspace, setMenuWorkspace] = useState<Workspace | null>(null);
+  const [taskMenuTask, setTaskMenuTask] = useState<Task | null>(null);
+  const [taskEditVisible, setTaskEditVisible] = useState(false);
+  const [taskEditText, setTaskEditText] = useState('');
+  const [taskDeleteConfirm, setTaskDeleteConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
@@ -190,6 +194,39 @@ const App = (): React.JSX.Element => {
     }
   };
 
+  const handleOpenTaskMenu = (task: Task) => {
+    setTaskMenuTask(task);
+    setTaskEditText(task.text);
+    setTaskEditVisible(false);
+    setTaskDeleteConfirm(false);
+  };
+
+  const handleSaveTaskEdit = async () => {
+    if (!taskMenuTask || !taskEditText.trim()) {
+      setError('Введите текст задачи');
+      return;
+    }
+    try {
+      setSaving(true);
+      await updateTaskText(taskMenuTask.id, taskEditText.trim());
+      setTaskEditVisible(false);
+      setTaskMenuTask(null);
+      await loadTasks();
+    } catch (e) {
+      setError('Не удалось сохранить задачу');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleConfirmDeleteTask = async () => {
+    if (!taskMenuTask) {
+      return;
+    }
+    setTaskDeleteConfirm(false);
+    await handleDelete(taskMenuTask);
+    setTaskMenuTask(null);
+  };
   const handleCreateWorkspace = async () => {
     if (!workspaceName.trim()) {
       setError('Введите название пространства');
@@ -262,7 +299,7 @@ const App = (): React.JSX.Element => {
       task={item}
       theme={theme}
       onToggleStatus={handleToggleStatus}
-      onDelete={handleDelete}
+      onMenu={handleOpenTaskMenu}
     />
   );
 
@@ -550,6 +587,224 @@ const App = (): React.JSX.Element => {
                   ]}>
                   <Text style={styles.primaryText}>
                     {saving ? 'Сохранение...' : 'Сохранить'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={!!taskMenuTask && !taskEditVisible && !taskDeleteConfirm}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setTaskMenuTask(null)}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Задача
+              </Text>
+              <View style={{gap: 10}}>
+                <Pressable
+                  onPress={() => setTaskEditVisible(true)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Редактировать
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setTaskDeleteConfirm(true)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.danger}]}>
+                    Удалить
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setTaskMenuTask(null)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Закрыть
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={taskEditVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => {
+            setTaskEditVisible(false);
+            setTaskMenuTask(null);
+          }}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Редактировать задачу
+              </Text>
+              <TextInput
+                placeholder="Текст задачи"
+                placeholderTextColor={theme.colors.muted}
+                value={taskEditText}
+                onChangeText={text => {
+                  setError(null);
+                  setTaskEditText(text);
+                }}
+                multiline
+                style={[
+                  styles.input,
+                  styles.inputMultiline,
+                  {
+                    backgroundColor: theme.colors.input,
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setTaskEditVisible(false);
+                    setTaskMenuTask(null);
+                  }}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Отмена
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={saving}
+                  onPress={handleSaveTaskEdit}
+                  style={({pressed}) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.accentMuted
+                        : theme.colors.accent,
+                      opacity: saving ? 0.7 : 1,
+                    },
+                  ]}>
+                  <Text style={styles.primaryText}>
+                    {saving ? 'Сохранение...' : 'Сохранить'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={taskDeleteConfirm}
+          animationType="fade"
+          transparent
+          onRequestClose={() => {
+            setTaskDeleteConfirm(false);
+            setTaskMenuTask(null);
+          }}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Удалить задачу?
+              </Text>
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setTaskDeleteConfirm(false);
+                    setTaskMenuTask(null);
+                  }}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Отмена
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={saving}
+                  onPress={handleConfirmDeleteTask}
+                  style={({pressed}) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.accentMuted
+                        : theme.colors.accent,
+                      opacity: saving ? 0.7 : 1,
+                    },
+                  ]}>
+                  <Text style={styles.primaryText}>
+                    {saving ? 'Удаление...' : 'Удалить'}
                   </Text>
                 </Pressable>
               </View>
@@ -874,14 +1129,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   themeToggle: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   themeToggleText: {
-    fontSize: 20,
+    fontSize: 16,
     color: '#0B1224',
     fontWeight: '800',
   },

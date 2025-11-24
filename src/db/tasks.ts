@@ -136,6 +136,14 @@ export const deleteTask = async (id: number): Promise<void> => {
   await db.executeSql('DELETE FROM tasks WHERE id = ?', [id]);
 };
 
+export const updateTaskText = async (id: number, text: string): Promise<void> => {
+  const db = await getDb();
+  await db.executeSql('UPDATE tasks SET title = ? WHERE id = ?', [
+    text.trim(),
+    id,
+  ]);
+};
+
 export const getWorkspaces = async (): Promise<Workspace[]> => {
   const db = await getDb();
   const [results] = await db.executeSql(
