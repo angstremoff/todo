@@ -10,6 +10,7 @@ import {
   LayoutAnimation,
   Modal,
   Platform,
+  Share,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -28,6 +29,8 @@ import {
   createTask,
   createWorkspace,
   deleteTask,
+  exportData,
+  importData,
   getTasks,
   getWorkspaces,
   renameWorkspace,
@@ -76,6 +79,11 @@ const App = (): React.JSX.Element => {
   const [taskEditVisible, setTaskEditVisible] = useState(false);
   const [taskEditText, setTaskEditText] = useState('');
   const [taskDeleteConfirm, setTaskDeleteConfirm] = useState(false);
+  const [exportVisible, setExportVisible] = useState(false);
+  const [exportText, setExportText] = useState('');
+  const [importVisible, setImportVisible] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [transfering, setTransfering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
@@ -227,6 +235,51 @@ const App = (): React.JSX.Element => {
     await handleDelete(taskMenuTask);
     setTaskMenuTask(null);
   };
+
+  const handleExport = async () => {
+    try {
+      setTransfering(true);
+      const data = await exportData();
+      const json = JSON.stringify(data);
+      setExportText(json);
+      setExportVisible(true);
+    } catch (e) {
+      setError('Не удалось экспортировать данные');
+    } finally {
+      setTransfering(false);
+    }
+  };
+
+  const handleShareExport = async () => {
+    if (!exportText) {
+      return;
+    }
+    try {
+      await Share.share({message: exportText});
+    } catch (e) {
+      setError('Не удалось поделиться экспортом');
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importText.trim()) {
+      setError('Вставьте данные для импорта');
+      return;
+    }
+    try {
+      setTransfering(true);
+      const parsed = JSON.parse(importText);
+      await importData(parsed);
+      setImportVisible(false);
+      setImportText('');
+      await loadWorkspaces();
+      await loadTasks();
+    } catch (e) {
+      setError('Импорт не удался. Проверьте формат.');
+    } finally {
+      setTransfering(false);
+    }
+  };
   const handleCreateWorkspace = async () => {
     if (!workspaceName.trim()) {
       setError('Введите название пространства');
@@ -356,21 +409,58 @@ const App = (): React.JSX.Element => {
             <Text style={[styles.sectionTitle, {color: theme.colors.text}]}>
               Рабочие пространства
             </Text>
-            <Pressable
-              onPress={() => {
-                setError(null);
-                setWorkspaceModalVisible(true);
-              }}
-              style={({pressed}) => [
-                styles.linkButton,
-                {
-                  backgroundColor: pressed
-                    ? theme.colors.accentMuted
-                    : theme.colors.accent,
-                },
-              ]}>
-              <Text style={styles.linkButtonText}>+ Создать</Text>
-            </Pressable>
+            <View style={styles.headerActions}>
+              <Pressable
+                onPress={handleExport}
+                disabled={transfering}
+                style={({pressed}) => [
+                  styles.smallAction,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.border
+                      : theme.colors.card,
+                    borderColor: theme.colors.border,
+                    opacity: transfering ? 0.6 : 1,
+                  },
+                ]}>
+                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
+                  Экспорт
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setError(null);
+                  setImportVisible(true);
+                }}
+                style={({pressed}) => [
+                  styles.smallAction,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.border
+                      : theme.colors.card,
+                    borderColor: theme.colors.border,
+                  },
+                ]}>
+                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
+                  Импорт
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  setError(null);
+                  setWorkspaceModalVisible(true);
+                }}
+                style={({pressed}) => [
+                  styles.linkButton,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.accentMuted
+                      : theme.colors.accent,
+                  },
+                ]}>
+                <Text style={styles.linkButtonText}>+ Создать</Text>
+              </Pressable>
+            </View>
           </View>
 
           {workspaces.length === 0 ? (
@@ -587,6 +677,158 @@ const App = (): React.JSX.Element => {
                   ]}>
                   <Text style={styles.primaryText}>
                     {saving ? 'Сохранение...' : 'Сохранить'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={exportVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setExportVisible(false)}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Экспорт
+              </Text>
+              <Text style={{color: theme.colors.muted}}>
+                Данные для переноса. Можно поделиться или скопировать.
+              </Text>
+              <TextInput
+                value={exportText}
+                editable={false}
+                multiline
+                style={[
+                  styles.input,
+                  styles.inputMultiline,
+                  {
+                    backgroundColor: theme.colors.input,
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setExportVisible(false)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Закрыть
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={handleShareExport}
+                  style={({pressed}) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.accentMuted
+                        : theme.colors.accent,
+                    },
+                  ]}>
+                  <Text style={styles.primaryText}>Поделиться</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={importVisible}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setImportVisible(false)}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Импорт
+              </Text>
+              <Text style={{color: theme.colors.muted}}>
+                Вставьте экспортированный JSON и примените.
+              </Text>
+              <TextInput
+                placeholder="Вставьте данные"
+                placeholderTextColor={theme.colors.muted}
+                value={importText}
+                onChangeText={text => {
+                  setError(null);
+                  setImportText(text);
+                }}
+                multiline
+                style={[
+                  styles.input,
+                  styles.inputMultiline,
+                  {
+                    backgroundColor: theme.colors.input,
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => {
+                    setImportVisible(false);
+                    setImportText('');
+                  }}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Отмена
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={transfering}
+                  onPress={handleImport}
+                  style={({pressed}) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.accentMuted
+                        : theme.colors.accent,
+                      opacity: transfering ? 0.7 : 1,
+                    },
+                  ]}>
+                  <Text style={styles.primaryText}>
+                    {transfering ? 'Импорт...' : 'Импортировать'}
                   </Text>
                 </Pressable>
               </View>
@@ -1291,6 +1533,21 @@ const styles = StyleSheet.create({
   primaryText: {
     fontWeight: '800',
     color: '#0B1224',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  smallAction: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  smallActionText: {
+    fontWeight: '700',
+    fontSize: 12,
   },
 });
 

@@ -179,3 +179,74 @@ export const deleteWorkspace = async (id: number): Promise<void> => {
   await db.executeSql('DELETE FROM tasks WHERE workspace_id = ?', [id]);
   await db.executeSql('DELETE FROM workspaces WHERE id = ?', [id]);
 };
+
+export const exportData = async (): Promise<{
+  workspaces: Workspace[];
+  tasks: Task[];
+}> => {
+  const db = await getDb();
+  const [wsRes] = await db.executeSql('SELECT * FROM workspaces ORDER BY id ASC');
+  const [taskRes] = await db.executeSql('SELECT * FROM tasks ORDER BY created_at DESC');
+  return {
+    workspaces: wsRes.rows.raw(),
+    tasks: taskRes.rows.raw().map(mapRowToTask),
+  };
+};
+
+export const importData = async (payload: {
+  workspaces: Array<{id?: number; name: string}>;
+  tasks: Array<{
+    text: string;
+    status: TaskStatus;
+    workspaceId: number;
+    createdAt: number;
+    completedAt?: number | null;
+  }>;
+}): Promise<void> => {
+  const db = await getDb();
+  const wsInput = payload.workspaces ?? [];
+  const tasksInput = payload.tasks ?? [];
+
+  await db.transaction(async tx => {
+    await tx.executeSql('DELETE FROM tasks');
+    await tx.executeSql('DELETE FROM workspaces');
+
+    const idMap = new Map<number, number>();
+    for (const ws of wsInput) {
+      const name = (ws.name || '').trim();
+      if (!name) {
+        continue;
+      }
+      const [res] = await tx.executeSql(
+        'INSERT INTO workspaces (name) VALUES (?)',
+        [name],
+      );
+      const newId = res.insertId ?? Date.now();
+      if (ws.id) {
+        idMap.set(ws.id, newId);
+      }
+    }
+
+    for (const t of tasksInput) {
+      const mappedWs =
+        idMap.get(t.workspaceId) ??
+        (wsInput[0]?.id ? idMap.get(wsInput[0].id) : undefined);
+      if (!mappedWs) {
+        continue;
+      }
+      const status: TaskStatus =
+        t.status === 'done' ? 'done' : 'active';
+      await tx.executeSql(
+        'INSERT INTO tasks (title, description, status, created_at, completed_at, workspace_id) VALUES (?, ?, ?, ?, ?, ?)',
+        [
+          (t.text || '').trim(),
+          '',
+          status,
+          t.createdAt || Date.now(),
+          status === 'done' ? t.completedAt ?? Date.now() : null,
+          mappedWs,
+        ],
+      );
+    }
+  });
+};
