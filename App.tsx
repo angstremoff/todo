@@ -1,4 +1,9 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -15,6 +20,7 @@ import {
   UIManager,
   View,
   useColorScheme,
+  GestureResponderEvent,
 } from 'react-native';
 import {SegmentedControl} from './src/components/SegmentedControl';
 import {TaskCard} from './src/components/TaskCard';
@@ -344,23 +350,24 @@ const App = (): React.JSX.Element => {
               />
             </View>
           ) : (
-            <>
+            <View style={styles.workspaceListWrapper}>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.workspaceList}>
                 {workspaces.map(space => {
                   const selected = space.id === selectedWorkspaceId;
+                  const openMenu = (e?: GestureResponderEvent) => {
+                    e?.stopPropagation();
+                    setMenuWorkspace(space);
+                    setRenameValue(space.name);
+                  };
                   return (
                     <Pressable
                       key={space.id}
                       onPress={() => {
                         setSelectedWorkspaceId(space.id);
                         setError(null);
-                      }}
-                      onLongPress={() => {
-                        setMenuWorkspace(space);
-                        setRenameValue(space.name);
                       }}
                       style={({pressed}) => [
                         styles.workspacePill,
@@ -371,21 +378,42 @@ const App = (): React.JSX.Element => {
                           borderColor: selected
                             ? theme.colors.accent
                             : theme.colors.border,
-                          opacity: pressed ? 0.85 : 1,
+                          opacity: pressed ? 0.9 : 1,
                         },
                       ]}>
-                      <Text
-                        style={[
-                          styles.workspaceText,
-                          {color: selected ? '#0B1224' : theme.colors.text},
-                        ]}>
-                        {space.name}
-                      </Text>
+                      <View style={styles.workspaceContent}>
+                        <Text
+                          style={[
+                            styles.workspaceText,
+                            {color: selected ? '#0B1224' : theme.colors.text},
+                          ]}
+                          numberOfLines={1}>
+                          {space.name}
+                        </Text>
+                        <Pressable
+                          onPress={openMenu}
+                          hitSlop={10}
+                          style={({pressed}) => [
+                            styles.workspaceMenuBtn,
+                            {
+                              backgroundColor: pressed
+                                ? theme.colors.border
+                                : 'transparent',
+                            },
+                          ]}>
+                          <Text
+                            style={{
+                              color: selected ? '#0B1224' : theme.colors.muted,
+                            }}>
+                            ⋯
+                          </Text>
+                        </Pressable>
+                      </View>
                     </Pressable>
                   );
                 })}
               </ScrollView>
-            </>
+            </View>
           )}
 
           <View
@@ -684,6 +712,7 @@ const App = (): React.JSX.Element => {
           onRequestClose={() => {
             setRenameModalVisible(false);
             setRenameValue('');
+            setMenuWorkspace(null);
           }}>
           <View
             style={[
@@ -839,7 +868,7 @@ const styles = StyleSheet.create({
   },
   topBar: {
     alignItems: 'flex-end',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   themeToggle: {
     width: 44,
@@ -857,29 +886,43 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '800',
   },
+  workspaceListWrapper: {
+    paddingVertical: 2,
+    marginBottom: 8,
+  },
   workspaceList: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingVertical: 4,
   },
   workspacePill: {
-    paddingHorizontal: 14,
-    height: 44,
-    minWidth: 120,
+    paddingHorizontal: 12,
+    height: 42,
+    minWidth: 140,
     justifyContent: 'center',
     borderRadius: 12,
     borderWidth: 1,
   },
+  workspaceContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   workspaceText: {
     fontWeight: '700',
     letterSpacing: 0.2,
+    flex: 1,
+  },
+  workspaceMenuBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
   linkButton: {
     paddingHorizontal: 12,
