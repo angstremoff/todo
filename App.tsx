@@ -85,6 +85,7 @@ const App = (): React.JSX.Element => {
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
+  const [importPath, setImportPath] = useState('');
   const [transfering, setTransfering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -92,6 +93,7 @@ const App = (): React.JSX.Element => {
 
   useEffect(() => {
     setThemeMode(systemScheme === 'dark' ? 'dark' : 'light');
+    setImportPath(BACKUP_PATH);
   }, [systemScheme]);
 
   const theme = useMemo(
@@ -261,6 +263,7 @@ const App = (): React.JSX.Element => {
       const json = JSON.stringify(data);
       await RNFS.writeFile(BACKUP_PATH, json, 'utf8');
       setExportText(json);
+      setImportPath(BACKUP_PATH);
       setExportVisible(true);
     } catch (e) {
       setError('Не удалось сохранить файл');
@@ -272,12 +275,13 @@ const App = (): React.JSX.Element => {
   const handleLoadFromFile = async () => {
     try {
       setTransfering(true);
-      const exists = await RNFS.exists(BACKUP_PATH);
+      const path = importPath || BACKUP_PATH;
+      const exists = await RNFS.exists(path);
       if (!exists) {
         setError('Файл не найден');
         return;
       }
-      const content = await RNFS.readFile(BACKUP_PATH, 'utf8');
+      const content = await RNFS.readFile(path, 'utf8');
       setImportText(content);
       setImportVisible(true);
     } catch (e) {
@@ -907,6 +911,22 @@ const App = (): React.JSX.Element => {
                 style={[
                   styles.input,
                   styles.inputMultiline,
+                  {
+                    backgroundColor: theme.colors.input,
+                    color: theme.colors.text,
+                  },
+                ]}
+              />
+              <Text style={{color: theme.colors.muted, marginTop: 6}}>
+                Путь файла (по умолчанию todo-backup.json в DocumentDirectory):
+              </Text>
+              <TextInput
+                placeholder={BACKUP_PATH}
+                placeholderTextColor={theme.colors.muted}
+                value={importPath}
+                onChangeText={text => setImportPath(text)}
+                style={[
+                  styles.input,
                   {
                     backgroundColor: theme.colors.input,
                     color: theme.colors.text,
