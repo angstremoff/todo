@@ -25,8 +25,6 @@ const CREATE_WORKSPACES_TABLE = `
   );
 `;
 
-const DEFAULT_WORKSPACES = ['Расписание трансферов', 'Задачи по проекту'];
-
 let dbInstance: SQLiteDatabase | null = null;
 
 const mapRowToTask = (row: any): Task => ({
@@ -46,13 +44,6 @@ const hasColumn = async (db: SQLiteDatabase, table: string, column: string) => {
 const ensureWorkspaces = async (db: SQLiteDatabase): Promise<Workspace[]> => {
   await db.executeSql(CREATE_WORKSPACES_TABLE);
   const [existing] = await db.executeSql('SELECT * FROM workspaces ORDER BY id ASC');
-  if (existing.rows.length === 0) {
-    for (const name of DEFAULT_WORKSPACES) {
-      await db.executeSql('INSERT INTO workspaces (name) VALUES (?)', [name]);
-    }
-    const [seeded] = await db.executeSql('SELECT * FROM workspaces ORDER BY id ASC');
-    return seeded.rows.raw();
-  }
   return existing.rows.raw();
 };
 
@@ -62,10 +53,12 @@ const ensureTasksStructure = async (db: SQLiteDatabase, defaultWorkspaceId: numb
   if (!hasWorkspace) {
     await db.executeSql('ALTER TABLE tasks ADD COLUMN workspace_id INTEGER;');
   }
-  await db.executeSql(
-    'UPDATE tasks SET workspace_id = ? WHERE workspace_id IS NULL OR workspace_id = 0',
-    [defaultWorkspaceId],
-  );
+  if (defaultWorkspaceId) {
+    await db.executeSql(
+      'UPDATE tasks SET workspace_id = ? WHERE workspace_id IS NULL OR workspace_id = 0',
+      [defaultWorkspaceId],
+    );
+  }
 };
 
 const initDatabase = async () => {
@@ -171,4 +164,10 @@ export const renameWorkspace = async (
     name.trim(),
     id,
   ]);
+};
+
+export const deleteWorkspace = async (id: number): Promise<void> => {
+  const db = await getDb();
+  await db.executeSql('DELETE FROM tasks WHERE workspace_id = ?', [id]);
+  await db.executeSql('DELETE FROM workspaces WHERE id = ?', [id]);
 };

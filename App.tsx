@@ -26,6 +26,7 @@ import {
   getTasks,
   getWorkspaces,
   renameWorkspace,
+  deleteWorkspace,
   updateTaskStatus,
 } from './src/db/tasks';
 import {Task, Workspace} from './src/types';
@@ -63,6 +64,7 @@ const App = (): React.JSX.Element => {
   const [workspaceName, setWorkspaceName] = useState('');
   const [renameModalVisible, setRenameModalVisible] = useState(false);
   const [renameValue, setRenameValue] = useState('');
+  const [confirmDeleteWs, setConfirmDeleteWs] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [workspaceSaving, setWorkspaceSaving] = useState(false);
@@ -80,7 +82,9 @@ const App = (): React.JSX.Element => {
     try {
       const data = await getWorkspaces();
       setWorkspaces(data);
-      if (!selectedWorkspaceId && data.length > 0) {
+      if (data.length === 0) {
+        setSelectedWorkspaceId(null);
+      } else if (!selectedWorkspaceId) {
         setSelectedWorkspaceId(data[0].id);
       }
     } catch (e) {
@@ -211,12 +215,32 @@ const App = (): React.JSX.Element => {
     }
   };
 
+  const handleDeleteWorkspace = async () => {
+    if (!selectedWorkspaceId) {
+      return;
+    }
+    try {
+      setWorkspaceSaving(true);
+      await deleteWorkspace(selectedWorkspaceId);
+      const nextSpaces = workspaces.filter(w => w.id !== selectedWorkspaceId);
+      setWorkspaces(nextSpaces);
+      setSelectedWorkspaceId(nextSpaces[0]?.id ?? null);
+      setConfirmDeleteWs(false);
+      setRenameModalVisible(false);
+      await loadTasks();
+    } catch (e) {
+      setError('Не удалось удалить пространство');
+    } finally {
+      setWorkspaceSaving(false);
+    }
+  };
+
   const renderTask = ({item}: {item: Task}) => (
     <TaskCard
       task={item}
       theme={theme}
       onToggleStatus={handleToggleStatus}
-      onDelete={item.status === 'done' ? handleDelete : undefined}
+      onDelete={handleDelete}
     />
   );
 
@@ -289,62 +313,98 @@ const App = (): React.JSX.Element => {
               <Text style={styles.linkButtonText}>+ Создать</Text>
             </Pressable>
           </View>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.workspaceList}>
-            {workspaces.map(space => {
-              const selected = space.id === selectedWorkspaceId;
-              return (
-                <Pressable
-                  key={space.id}
-                  onPress={() => {
-                    setSelectedWorkspaceId(space.id);
-                    setError(null);
-                  }}
-                  style={({pressed}) => [
-                    styles.workspacePill,
-                    {
-                      backgroundColor: selected
-                        ? theme.colors.accent
-                        : theme.colors.card,
-                      borderColor: selected
-                        ? theme.colors.accent
-                        : theme.colors.border,
-                      opacity: pressed ? 0.85 : 1,
-                    },
-                  ]}>
-                  <Text
-                    style={[
-                      styles.workspaceText,
-                      {color: selected ? '#0B1224' : theme.colors.text},
+
+          {workspaces.length === 0 ? (
+            <View style={{marginBottom: 12}}>
+              <EmptyState
+                title="Нет пространств"
+                subtitle="Создайте первое, чтобы добавлять задачи."
+                actionLabel="Создать"
+                onAction={() => setWorkspaceModalVisible(true)}
+                theme={theme}
+              />
+            </View>
+          ) : (
+            <>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.workspaceList}>
+                {workspaces.map(space => {
+                  const selected = space.id === selectedWorkspaceId;
+                  return (
+                    <Pressable
+                      key={space.id}
+                      onPress={() => {
+                        setSelectedWorkspaceId(space.id);
+                        setError(null);
+                      }}
+                      style={({pressed}) => [
+                        styles.workspacePill,
+                        {
+                          backgroundColor: selected
+                            ? theme.colors.accent
+                            : theme.colors.card,
+                          borderColor: selected
+                            ? theme.colors.accent
+                            : theme.colors.border,
+                          opacity: pressed ? 0.85 : 1,
+                        },
+                      ]}>
+                      <Text
+                        style={[
+                          styles.workspaceText,
+                          {color: selected ? '#0B1224' : theme.colors.text},
+                        ]}>
+                        {space.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </ScrollView>
+              {selectedWorkspace ? (
+                <View style={styles.workspaceActions}>
+                  <Pressable
+                    onPress={() => {
+                      setRenameValue(selectedWorkspace.name);
+                      setRenameModalVisible(true);
+                    }}
+                    style={({pressed}) => [
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: pressed
+                          ? theme.colors.border
+                          : theme.colors.card,
+                        borderColor: theme.colors.border,
+                        flex: 1,
+                      },
                     ]}>
-                    {space.name}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          {selectedWorkspace ? (
-            <Pressable
-              onPress={() => {
-                setRenameValue(selectedWorkspace.name);
-                setRenameModalVisible(true);
-              }}
-              style={({pressed}) => [
-                styles.renameButton,
-                {
-                  borderColor: theme.colors.border,
-                  backgroundColor: pressed
-                    ? theme.colors.border
-                    : theme.colors.card,
-                },
-              ]}>
-              <Text style={[styles.renameText, {color: theme.colors.muted}]}>
-                Переименовать выбранное
-              </Text>
-            </Pressable>
-          ) : null}
+                    <Text
+                      style={[styles.renameText, {color: theme.colors.muted}]}>
+                      Переименовать
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => setConfirmDeleteWs(true)}
+                    style={({pressed}) => [
+                      styles.secondaryButton,
+                      {
+                        backgroundColor: pressed
+                          ? theme.colors.border
+                          : theme.colors.card,
+                        borderColor: theme.colors.border,
+                        flex: 1,
+                      },
+                    ]}>
+                    <Text
+                      style={[styles.renameText, {color: theme.colors.danger}]}>
+                      Удалить
+                    </Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </>
+          )}
 
           <View
             style={[
@@ -635,6 +695,67 @@ const App = (): React.JSX.Element => {
             </View>
           </View>
         </Modal>
+
+        <Modal
+          visible={confirmDeleteWs}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setConfirmDeleteWs(false)}>
+          <View
+            style={[
+              styles.modalOverlay,
+              {backgroundColor: theme.colors.overlay},
+            ]}>
+            <View
+              style={[
+                styles.modalCard,
+                {
+                  backgroundColor: theme.colors.surface,
+                  borderColor: theme.colors.border,
+                },
+              ]}>
+              <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
+                Удалить пространство?
+              </Text>
+              <Text style={{color: theme.colors.muted}}>
+                Все задачи внутри тоже будут удалены.
+              </Text>
+              <View style={styles.modalActions}>
+                <Pressable
+                  onPress={() => setConfirmDeleteWs(false)}
+                  style={({pressed}) => [
+                    styles.secondaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.border
+                        : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text style={[styles.secondaryText, {color: theme.colors.text}]}>
+                    Отмена
+                  </Text>
+                </Pressable>
+                <Pressable
+                  disabled={workspaceSaving}
+                  onPress={handleDeleteWorkspace}
+                  style={({pressed}) => [
+                    styles.primaryButton,
+                    {
+                      backgroundColor: pressed
+                        ? theme.colors.accentMuted
+                        : theme.colors.accent,
+                      opacity: workspaceSaving ? 0.7 : 1,
+                    },
+                  ]}>
+                  <Text style={styles.primaryText}>
+                    {workspaceSaving ? 'Удаление...' : 'Удалить'}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </ThemeContext.Provider>
   );
@@ -675,13 +796,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   workspaceList: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 10,
-    paddingVertical: 6,
+    paddingVertical: 4,
   },
   workspacePill: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 14,
+    height: 44,
+    minWidth: 120,
+    justifyContent: 'center',
+    borderRadius: 12,
     borderWidth: 1,
   },
   workspaceText: {
@@ -697,12 +822,9 @@ const styles = StyleSheet.create({
     color: '#0B1224',
     fontWeight: '800',
   },
-  renameButton: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 12,
-    borderWidth: 1,
+  workspaceActions: {
+    flexDirection: 'row',
+    gap: 8,
     marginBottom: 8,
   },
   renameText: {
