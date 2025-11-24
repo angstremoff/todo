@@ -193,28 +193,48 @@ export const exportData = async (): Promise<{
   };
 };
 
-export const importData = async (payload: {
-  workspaces: Array<{id?: number; name: string}>;
-  tasks: Array<{
-    text: string;
-    status: TaskStatus;
-    workspaceId: number;
-    createdAt: number;
-    completedAt?: number | null;
-  }>;
-}): Promise<void> => {
+export const importData = async (
+  payload: {
+    workspaces: Array<{id?: number; name: string}>;
+    tasks: Array<{
+      text: string;
+      status: TaskStatus;
+      workspaceId: number;
+      createdAt: number;
+      completedAt?: number | null;
+    }>;
+  },
+  mode: 'replace' | 'merge' = 'replace',
+): Promise<void> => {
   const db = await getDb();
   const wsInput = payload.workspaces ?? [];
   const tasksInput = payload.tasks ?? [];
 
   await db.transaction(async tx => {
-    await tx.executeSql('DELETE FROM tasks');
-    await tx.executeSql('DELETE FROM workspaces');
-
     const idMap = new Map<number, number>();
+    if (mode === 'replace') {
+      await tx.executeSql('DELETE FROM tasks');
+      await tx.executeSql('DELETE FROM workspaces');
+    } else {
+      const [existing] = await tx.executeSql('SELECT * FROM workspaces');
+      existing.rows.raw().forEach((w: any) => {
+        idMap.set(w.id, w.id);
+        if (w.name) {
+          idMap.set(`name:${w.name}` as any, w.id);
+        }
+      });
+    }
+
     for (const ws of wsInput) {
       const name = (ws.name || '').trim();
       if (!name) {
+        continue;
+      }
+      const existingId = mode === 'merge' ? idMap.get(`name:${name}` as any) : undefined;
+      if (existingId) {
+        if (ws.id) {
+          idMap.set(ws.id, existingId);
+        }
         continue;
       }
       const [res] = await tx.executeSql(
@@ -225,12 +245,14 @@ export const importData = async (payload: {
       if (ws.id) {
         idMap.set(ws.id, newId);
       }
+      idMap.set(`name:${name}` as any, newId);
     }
 
     for (const t of tasksInput) {
       const mappedWs =
         idMap.get(t.workspaceId) ??
-        (wsInput[0]?.id ? idMap.get(wsInput[0].id) : undefined);
+        idMap.get(`name:${wsInput.find(w => w.id === t.workspaceId)?.name}` as any) ??
+        idMap.values().next().value;
       if (!mappedWs) {
         continue;
       }

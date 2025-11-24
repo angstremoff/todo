@@ -22,6 +22,7 @@ import {
   View,
   useColorScheme,
 } from 'react-native';
+import RNFS from 'react-native-fs';
 import {SegmentedControl} from './src/components/SegmentedControl';
 import {TaskCard} from './src/components/TaskCard';
 import {EmptyState} from './src/components/EmptyState';
@@ -83,6 +84,7 @@ const App = (): React.JSX.Element => {
   const [exportText, setExportText] = useState('');
   const [importVisible, setImportVisible] = useState(false);
   const [importText, setImportText] = useState('');
+  const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge');
   const [transfering, setTransfering] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -236,6 +238,8 @@ const App = (): React.JSX.Element => {
     setTaskMenuTask(null);
   };
 
+  const BACKUP_PATH = `${RNFS.DocumentDirectoryPath}/todo-backup.json`;
+
   const handleExport = async () => {
     try {
       setTransfering(true);
@@ -245,6 +249,39 @@ const App = (): React.JSX.Element => {
       setExportVisible(true);
     } catch (e) {
       setError('Не удалось экспортировать данные');
+    } finally {
+      setTransfering(false);
+    }
+  };
+
+  const handleSaveToFile = async () => {
+    try {
+      setTransfering(true);
+      const data = await exportData();
+      const json = JSON.stringify(data);
+      await RNFS.writeFile(BACKUP_PATH, json, 'utf8');
+      setExportText(json);
+      setExportVisible(true);
+    } catch (e) {
+      setError('Не удалось сохранить файл');
+    } finally {
+      setTransfering(false);
+    }
+  };
+
+  const handleLoadFromFile = async () => {
+    try {
+      setTransfering(true);
+      const exists = await RNFS.exists(BACKUP_PATH);
+      if (!exists) {
+        setError('Файл не найден');
+        return;
+      }
+      const content = await RNFS.readFile(BACKUP_PATH, 'utf8');
+      setImportText(content);
+      setImportVisible(true);
+    } catch (e) {
+      setError('Не удалось прочитать файл');
     } finally {
       setTransfering(false);
     }
@@ -269,7 +306,7 @@ const App = (): React.JSX.Element => {
     try {
       setTransfering(true);
       const parsed = JSON.parse(importText);
-      await importData(parsed);
+      await importData(parsed, importMode);
       setImportVisible(false);
       setImportText('');
       await loadWorkspaces();
@@ -410,6 +447,40 @@ const App = (): React.JSX.Element => {
               Рабочие пространства
             </Text>
             <View style={styles.headerActions}>
+              <Pressable
+                onPress={handleSaveToFile}
+                disabled={transfering}
+                style={({pressed}) => [
+                  styles.smallAction,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.border
+                      : theme.colors.card,
+                    borderColor: theme.colors.border,
+                    opacity: transfering ? 0.6 : 1,
+                  },
+                ]}>
+                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
+                  В файл
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleLoadFromFile}
+                disabled={transfering}
+                style={({pressed}) => [
+                  styles.smallAction,
+                  {
+                    backgroundColor: pressed
+                      ? theme.colors.border
+                      : theme.colors.card,
+                    borderColor: theme.colors.border,
+                    opacity: transfering ? 0.6 : 1,
+                  },
+                ]}>
+                <Text style={[styles.smallActionText, {color: theme.colors.text}]}>
+                  Из файла
+                </Text>
+              </Pressable>
               <Pressable
                 onPress={handleExport}
                 disabled={transfering}
@@ -775,6 +846,52 @@ const App = (): React.JSX.Element => {
               <Text style={[styles.modalTitle, {color: theme.colors.text}]}>
                 Импорт
               </Text>
+              <View style={styles.importModeRow}>
+                <Pressable
+                  onPress={() => setImportMode('merge')}
+                  style={({pressed}) => [
+                    styles.smallAction,
+                    {
+                      backgroundColor:
+                        importMode === 'merge'
+                          ? theme.colors.accent
+                          : pressed
+                          ? theme.colors.border
+                          : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.smallActionText,
+                      {color: importMode === 'merge' ? '#0B1224' : theme.colors.text},
+                    ]}>
+                    Добавить
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setImportMode('replace')}
+                  style={({pressed}) => [
+                    styles.smallAction,
+                    {
+                      backgroundColor:
+                        importMode === 'replace'
+                          ? theme.colors.accent
+                          : pressed
+                          ? theme.colors.border
+                          : theme.colors.card,
+                      borderColor: theme.colors.border,
+                    },
+                  ]}>
+                  <Text
+                    style={[
+                      styles.smallActionText,
+                      {color: importMode === 'replace' ? '#0B1224' : theme.colors.text},
+                    ]}>
+                    Заменить
+                  </Text>
+                </Pressable>
+              </View>
               <Text style={{color: theme.colors.muted}}>
                 Вставьте экспортированный JSON и примените.
               </Text>
@@ -1548,6 +1665,11 @@ const styles = StyleSheet.create({
   smallActionText: {
     fontWeight: '700',
     fontSize: 12,
+  },
+  importModeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
   },
 });
 

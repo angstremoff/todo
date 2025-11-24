@@ -13,9 +13,18 @@ jest.mock('../src/db/tasks', () => ({
   getWorkspaces: jest.fn().mockResolvedValue([{id: 1, name: 'Рабочее'}]),
   createWorkspace: jest.fn(),
   renameWorkspace: jest.fn(),
+  exportData: jest.fn().mockResolvedValue({workspaces: [], tasks: []}),
+  importData: jest.fn(),
+  updateTaskText: jest.fn(),
 }));
 
 jest.spyOn(require('react-native'), 'useColorScheme').mockReturnValue('light');
+jest.mock('react-native-fs', () => ({
+  DocumentDirectoryPath: '/tmp',
+  writeFile: jest.fn(() => Promise.resolve()),
+  readFile: jest.fn(() => Promise.resolve('')),
+  exists: jest.fn(() => Promise.resolve(true)),
+}));
 
 import App from '../App';
 
