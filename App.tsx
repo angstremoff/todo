@@ -78,23 +78,34 @@ const App = (): React.JSX.Element => {
     [themeMode],
   );
 
+  const ensureSelection = useCallback(
+    (list: Workspace[]) => {
+      if (list.length === 0) {
+        setSelectedWorkspaceId(null);
+      } else if (
+        !selectedWorkspaceId ||
+        !list.some(w => w.id === selectedWorkspaceId)
+      ) {
+        setSelectedWorkspaceId(list[0].id);
+      }
+    },
+    [selectedWorkspaceId],
+  );
+
   const loadWorkspaces = useCallback(async () => {
     try {
       const data = await getWorkspaces();
       setWorkspaces(data);
-      if (data.length === 0) {
-        setSelectedWorkspaceId(null);
-      } else if (!selectedWorkspaceId) {
-        setSelectedWorkspaceId(data[0].id);
-      }
+      ensureSelection(data);
     } catch (e) {
       setError('Не удалось загрузить пространства');
     }
-  }, [selectedWorkspaceId]);
+  }, [ensureSelection]);
 
   const loadTasks = useCallback(async () => {
     if (!selectedWorkspaceId) {
       setTasks([]);
+      setLoading(false);
       return;
     }
     setLoading(true);
@@ -185,8 +196,11 @@ const App = (): React.JSX.Element => {
       const ws = await createWorkspace(workspaceName.trim());
       setWorkspaceName('');
       setWorkspaceModalVisible(false);
-      setWorkspaces(prev => [...prev, ws]);
-      setSelectedWorkspaceId(ws.id);
+      setWorkspaces(prev => {
+        const next = [...prev, ws];
+        ensureSelection(next);
+        return next;
+      });
     } catch (e) {
       setError('Не удалось создать пространство');
     } finally {
@@ -202,11 +216,13 @@ const App = (): React.JSX.Element => {
     try {
       setWorkspaceSaving(true);
       await renameWorkspace(selectedWorkspaceId, renameValue.trim());
-      setWorkspaces(prev =>
-        prev.map(w =>
+      setWorkspaces(prev => {
+        const next = prev.map(w =>
           w.id === selectedWorkspaceId ? {...w, name: renameValue.trim()} : w,
-        ),
-      );
+        );
+        ensureSelection(next);
+        return next;
+      });
       setRenameModalVisible(false);
     } catch (e) {
       setError('Не удалось переименовать пространство');
@@ -224,7 +240,7 @@ const App = (): React.JSX.Element => {
       await deleteWorkspace(selectedWorkspaceId);
       const nextSpaces = workspaces.filter(w => w.id !== selectedWorkspaceId);
       setWorkspaces(nextSpaces);
-      setSelectedWorkspaceId(nextSpaces[0]?.id ?? null);
+      ensureSelection(nextSpaces);
       setConfirmDeleteWs(false);
       setRenameModalVisible(false);
       await loadTasks();
@@ -431,11 +447,7 @@ const App = (): React.JSX.Element => {
             </Text>
           ) : null}
 
-          {loading ? (
-            <View style={styles.loading}>
-              <ActivityIndicator color={theme.colors.accent} />
-            </View>
-          ) : (
+          <View style={{flex: 1}}>
             <FlatList
               data={tasks}
               keyExtractor={item => item.id.toString()}
@@ -445,7 +457,12 @@ const App = (): React.JSX.Element => {
               ListEmptyComponent={listEmpty}
               showsVerticalScrollIndicator={false}
             />
-          )}
+            {loading ? (
+              <View style={styles.loadingOverlay}>
+                <ActivityIndicator color={theme.colors.accent} />
+              </View>
+            ) : null}
+          </View>
 
           <Pressable
             onPress={() => setModalVisible(true)}
@@ -841,13 +858,18 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  loading: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   listContent: {
     gap: 12,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
   fab: {
     position: 'absolute',
