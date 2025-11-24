@@ -117,17 +117,14 @@ const App = (): React.JSX.Element => {
     }
     setLoading(true);
     try {
-      const data = await getTasks(
-        selectedWorkspaceId,
-        activeTab === 'active' ? 'active' : 'done',
-      );
+      const data = await getTasks(selectedWorkspaceId, undefined);
       setTasks(data);
     } catch (e) {
       setError('Не удалось загрузить задачи');
     } finally {
       setLoading(false);
     }
-  }, [activeTab, selectedWorkspaceId]);
+  }, [selectedWorkspaceId]);
 
   useEffect(() => {
     loadWorkspaces();
@@ -444,7 +441,13 @@ const App = (): React.JSX.Element => {
 
           <View style={{flex: 1}}>
             <FlatList
-              data={tasks}
+              data={tasks.filter(t =>
+                activeTab === 'active'
+                  ? t.status === 'active'
+                  : activeTab === 'done'
+                  ? t.status === 'done'
+                  : true,
+              )}
               keyExtractor={item => item.id.toString()}
               renderItem={renderTask}
               contentContainerStyle={[styles.listContent, {paddingBottom: 120}]}
